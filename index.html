@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title> Inventory</title> 
+  <link rel="shortcut icon" href="img/logo.png" type="image/png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://kit.fontawesome.com/a2e0a1f70d.js" crossorigin="anonymous"></script>
+
+  <style>
+    body { background: linear-gradient(135deg, #ece9e6, #ffffff); min-height:100vh; }
+    .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(10px); box-shadow: 0 8px 24px rgba(0,0,0,0.1);}
+    .modal-backdrop { background: rgba(0,0,0,0.5);}
+    .table-scroll { max-height:56vh; overflow-y:auto; }
+  </style>
+</head>
+<body class="text-gray-800 font-inter">
+
+<div class="max-w-6xl mx-auto p-6">
+  <header class="glass rounded-2xl p-6 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <img src="https://cdn-icons-png.flaticon.com/512/869/869636.png" class="w-10 h-10" alt="logo" />
+      <div>
+        <h1 class="text-3xl font-bold text-gray-800">Inventory Management </h1>
+        <p class="text-sm text-gray-500">Track, manage, and export your stock elegantly.</p>
+      </div>
+    </div>
+    <div class="flex gap-2 items-center">
+      <input id="search" class="px-3 py-2 border rounded-md focus:ring focus:ring-blue-200" placeholder="🔍 Search items..." />
+      <select id="sort" class="px-3 py-2 border rounded-md focus:ring focus:ring-blue-200">
+        <option value="name-asc">Name ↑</option>
+        <option value="name-desc">Name ↓</option>
+        <option value="qty-desc">Qty ↓</option>
+        <option value="qty-asc">Qty ↑</option>
+        <option value="price-desc">Price ↓</option>
+        <option value="price-asc">Price ↑</option> 
+        <option value="category-asc">Category ↑</option>
+      </select>
+      <button id="exportPdf" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition flex items-center gap-2">
+        <i class="fas fa-file-export"></i> Export
+      </button>
+      <button id="openAdd" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition flex items-center gap-2">
+        <i class="fas fa-plus"></i> Add
+      </button>
+    </div>
+  </header>
+
+  <main class="glass rounded-2xl p-6">
+    <div class="table-scroll">
+      <table class="w-full text-sm border-collapse">
+        <thead class="bg-gradient-to-r from-blue-100 to-blue-50 sticky top-0">
+          <tr>
+            <th class="text-left px-3 py-2 font-semibold">#</th>
+            <th class="text-left px-3 py-2 font-semibold">Name</th>
+            <th class="text-left px-3 py-2 font-semibold">Category</th>
+            <th class="text-right px-3 py-2 font-semibold">Qty</th>
+            <th class="text-right px-3 py-2 font-semibold">Price</th>
+            <th class="text-right px-3 py-2 font-semibold">Value</th>
+            <th class="px-3 py-2 text-center font-semibold">Edit</th>
+            <th class="px-3 py-2 text-center font-semibold">Delete</th>
+          </tr>
+        </thead>
+        <tbody id="inventoryBody" class="divide-y divide-gray-100"></tbody>
+      </table>
+    </div>
+    <div id="summary" class="mt-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-sm text-gray-700">
+      <div id="counts" class="italic"></div>
+      <div id="totalValue" class="font-semibold text-lg text-gray-800"></div>
+    </div>
+  </main>
+</div>
+
+<div id="modal" class="fixed inset-0 hidden items-center justify-center modal-backdrop z-50">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 animate-fadeIn">
+    <div class="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-t-xl">
+      <h3 id="modalTitle" class="text-lg font-semibold">Add Item</h3>
+      <button id="closeModal" class="text-white text-2xl">&times;</button>
+    </div>
+    <form id="itemForm" class="px-6 py-4 space-y-3">
+      <input type="hidden" id="itemId" />
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Name</label>
+        <input id="name" required class="w-full mt-1 px-3 py-2 border rounded focus:ring focus:ring-blue-200" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Category</label>
+        <input id="category" class="w-full mt-1 px-3 py-2 border rounded focus:ring focus:ring-blue-200" />
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Quantity</label>
+          <input id="quantity" type="number" min="0" value="0" required class="w-full mt-1 px-3 py-2 border rounded focus:ring focus:ring-blue-200" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Price ($)</label>
+          <input id="price" type="number" step="0.01" min="0" value="0.00" required class="w-full mt-1 px-3 py-2 border rounded focus:ring focus:ring-blue-200" />
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Description</label>
+        <textarea id="description" rows="3" class="w-full mt-1 px-3 py-2 border rounded focus:ring focus:ring-blue-200"></textarea>
+      </div>
+      <div class="flex justify-end gap-2 pt-3">
+        <button type="button" id="cancelBtn" class="px-4 py-2 rounded border">Cancel</button>
+        <button type="submit" class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 transition">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast" class="fixed right-4 bottom-6 hidden bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg"></div>
+
+<script>
+const { jsPDF } = window.jspdf;
+
+let inventory = JSON.parse(localStorage.getItem('inventory_v2')) || [
+  { id: uid(), name: 'Coffee 1', category: 'Beverage', quantity: 24, price: 2.5, description: 'Strong single shot of espresso.' },
+  { id: uid(), name: 'Coffee 2', category: 'Beverage', quantity: 16, price: 3.5, description: 'Espresso with steamed milk & foam.' },
+  { id: uid(), name: 'Coffee 3', category: 'Pastry', quantity: 12, price: 2.75, description: 'Freshly baked muffin.' },
+  { id: uid(), name: 'Coffee 4', category: 'Pastry', quantity: 8, price: 2.25, description: 'Buttery flaky croissant.' },
+];
+
+const inventoryBody = document.getElementById('inventoryBody');
+const countsEl = document.getElementById('counts');
+const totalValueEl = document.getElementById('totalValue');
+const searchInput = document.getElementById('search');
+const sortSelect = document.getElementById('sort');
+const modal = document.getElementById('modal');
+const modalTitle = document.getElementById('modalTitle');
+const itemForm = document.getElementById('itemForm');
+const toast = document.getElementById('toast');
+
+document.getElementById('openAdd').addEventListener('click', ()=>openModal());
+document.getElementById('closeModal').addEventListener('click', closeModal);
+document.getElementById('cancelBtn').addEventListener('click', closeModal);
+document.getElementById('exportPdf').addEventListener('click', exportPdf);
+searchInput.addEventListener('input', render);
+sortSelect.addEventListener('change', render);
+
+itemForm.addEventListener('submit', e=>{
+  e.preventDefault();
+  const id = document.getElementById('itemId').value;
+  const name = document.getElementById('name').value.trim();
+  const category = document.getElementById('category').value.trim();
+  const quantity = parseInt(document.getElementById('quantity').value || '0',10);
+  const price = parseFloat(document.getElementById('price').value || '0');
+  const description = document.getElementById('description').value.trim();
+
+  if(!name){showToast('Name is required'); return;}
+
+  if(id){
+    const idx = inventory.findIndex(i=>i.id===id);
+    if(idx>=0){inventory[idx]={...inventory[idx],name,category,quantity,price,description}; save(); showToast('✅ Item updated');}
+  }else{
+    inventory.push({id:uid(),name,category,quantity,price,description}); save(); showToast('✅ Item added');
+  }
+  closeModal();
+  render();
+});
+
+function render(){
+  const q = searchInput.value.trim().toLowerCase();
+  const sort = sortSelect.value;
+  let list = inventory.slice();
+  if(q) list = list.filter(i=>i.name.toLowerCase().includes(q) || (i.category||'').toLowerCase().includes(q) || (i.description||'').toLowerCase().includes(q));
+  list.sort(getSorter(sort));
+  inventoryBody.innerHTML='';
+  list.forEach((item,index)=>{
+    const tr=document.createElement('tr');
+    tr.className='hover:bg-blue-50 transition';
+    tr.innerHTML=`
+      <td class="px-3 py-2">${index+1}</td>
+      <td class="px-3 py-2 font-medium">${escapeHtml(item.name)}</td>
+      <td class="px-3 py-2 text-sm text-gray-600">${escapeHtml(item.category||'')}</td>
+      <td class="px-3 py-2 text-right">${item.quantity}</td>
+      <td class="px-3 py-2 text-right">$${item.price.toFixed(2)}</td>
+      <td class="px-3 py-2 text-right font-semibold">$${(item.quantity*item.price).toFixed(2)}</td>
+      <td class="px-3 py-2 text-center"><button class="editBtn text-blue-600 hover:text-blue-800">Edit</button></td>
+      <td class="px-3 py-2 text-center"><button class="delBtn text-red-600 hover:text-red-800">Delete</button></td>
+    `;
+    inventoryBody.appendChild(tr);
+
+    // Add listeners dynamically
+    tr.querySelector('.editBtn').addEventListener('click', ()=>openModal(item.id));
+    tr.querySelector('.delBtn').addEventListener('click', ()=>onDelete(item.id));
+  });
+  updateSummary();
+}
+
+function openModal(id){
+  if(id){
+    const item = inventory.find(i=>i.id===id);
+    if(!item) return;
+    document.getElementById('itemId').value=item.id;
+    document.getElementById('name').value=item.name;
+    document.getElementById('category').value=item.category||'';
+    document.getElementById('quantity').value=item.quantity;
+    document.getElementById('price').value=item.price.toFixed(2);
+    document.getElementById('description').value=item.description||'';
+    modalTitle.innerText='Edit Item';
+  }else{
+    document.getElementById('itemId').value='';
+    itemForm.reset();
+    document.getElementById('quantity').value='0';
+    document.getElementById('price').value='0.00';
+    modalTitle.innerText='Add Item';
+  }
+  modal.classList.remove('hidden'); modal.classList.add('flex');
+}
+
+function closeModal(){ modal.classList.remove('flex'); modal.classList.add('hidden'); }
+
+function onDelete(id){
+  const item = inventory.find(i=>i.id===id);
+  if(!item) return;
+  if(confirm(`Delete "${item.name}"?`)){
+    inventory = inventory.filter(i=>i.id!==id); save(); render(); showToast('🗑️ Item deleted');
+  }
+}
+
+function updateSummary(){
+  const totalItems=inventory.reduce((s,it)=>s+(it.quantity||0),0);
+  const distinct=inventory.length;
+  const totalValue=inventory.reduce((s,it)=>s+(it.quantity||0)*(it.price||0),0);
+  countsEl.innerText=`${distinct} products • ${totalItems} total quantities`;
+  totalValueEl.innerText=`💰 Total value: $${totalValue.toFixed(2)}`;
+}
+
+function save(){ localStorage.setItem('inventory_v2',JSON.stringify(inventory)); }
+
+function exportPdf(){
+  if(!inventory.length){showToast('No data to export'); return;}
+  const doc = new jsPDF();
+  doc.setFontSize(16); doc.text("Inventory Report",14,18);
+  doc.setFontSize(11); doc.text(`Generated: ${new Date().toLocaleString()}`,14,26);
+  const tableData = inventory.map((i,idx)=>[idx+1,i.name,i.category,i.quantity,`$${i.price.toFixed(2)}`,`$${(i.quantity*i.price).toFixed(2)}`]);
+  doc.autoTable({startY:32,head:[['#','Name','Category','Qty','Price','Value']],body:tableData,headStyles:{fillColor:[0,122,255],textColor:255}});
+  const totalValue = inventory.reduce((s,it)=>s+it.quantity*it.price,0);
+  doc.text(`Total Inventory Value: $${totalValue.toFixed(2)}`,14,doc.lastAutoTable.finalY+10);
+  doc.save('inventory_report.pdf'); showToast('📄 PDF exported');
+}
+
+function getSorter(sort){
+  switch(sort){
+    case 'name-asc': return (a,b)=>a.name.localeCompare(b.name);
+    case 'name-desc': return (a,b)=>b.name.localeCompare(a.name);
+    case 'qty-asc': return (a,b)=>(a.quantity||0)-(b.quantity||0);
+    case 'qty-desc': return (a,b)=>(b.quantity||0)-(a.quantity||0);
+    case 'price-asc': return (a,b)=>(a.price||0)-(b.price||0);
+    case 'price-desc': return (a,b)=>(b.price||0)-(a.price||0);
+    case 'category-asc': return (a,b)=>(a.category||'').localeCompare(b.category||'');
+    case 'category-desc': return (a,b)=>(b.category||'').localeCompare(a.category||'');
+    default: return ()=>0;
+  }
+}
+
+function uid(){ return 'id_'+Math.random().toString(36).slice(2,9); }
+
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+function showToast(msg,ms=2000){ toast.innerText=msg; toast.classList.remove('hidden'); setTimeout(()=>toast.classList.add('hidden'),ms); }
+
+render();
+</script>
+
+</body>
+</html>
